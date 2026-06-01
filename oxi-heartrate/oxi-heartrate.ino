@@ -25,8 +25,20 @@
 
 #include <Wire.h>
 #include "MAX30105.h"
-
+#include <PubSubClient.h>
 #include "heartRate.h"
+
+#include <WiFi.h>
+const char* ssid = "FTN_wifi";
+const char* password = "ftn12345";
+
+const char* mqtt_server = "broker.hivemq.com";    // koristimo javni mqtt broker
+
+WiFiClient espClient;              // iz Wifi.h biblioteke, koristi se da otvori vezu i slaj esiorve podatke preko interneta
+PubSubClient client(espClient);    // iz Pubsubclient.h biblioteke, PubSubClient pravi klijenta koji na MQTT protokol, ali nema pristup wifi, tako da mu se prosledjuje WiFiCLient
+long lastMsg = 0;
+char msg[50];
+int value = 0;
 
 MAX30105 particleSensor;
 
@@ -42,6 +54,12 @@ void setup()
 {
   Serial.begin(115200);
   Serial.println("Initializing...");
+
+  setup_wifi();    // povezi se na wifi
+
+  client.setServer(mqtt_server, 1883);        // postavi servera za esp32 da bude mqtt server koji je gore definisan
+  client.setCallback(callback);               //  postavljanje funkcije koja ce se pozivati kad stigne poruka
+
   Wire.begin(0,1);
   // Initialize sensor
   if (!particleSensor.begin(Wire, I2C_SPEED_FAST)) //Use default I2C port, 400kHz speed
@@ -66,6 +84,12 @@ void setup()
 
 void loop()
 {
+
+  if (!client.connected()) {
+    reconnect();                 // ukoliko klijent nije povezan, pozovi reconnect
+  }
+  client.loop();      // pokreni klijenta da slusa poruke
+
   long irValue = particleSensor.getIR();
 
   if (checkForBeat(irValue) == true)
@@ -89,30 +113,106 @@ void loop()
     }
   }
 
- 
-  if (irValue < 50000){
+  // slanje poruke
+  long now = millis();
+  if(now - lastMsg > sendInterval){
+    lastMsg = now;
     
-    Serial.print("IR=");
-    Serial.print(irValue);
-    Serial.print(", BPM=0");
-    Serial.print(", Avg BPM=");
-    Serial.print(beatAvg);
+    // priprema stringova za slanje
+    char tempStringBPM[8];
+    char tempStringAvg[8];
+    char tempStringIR[12];
 
-    Serial.print(" No finger?");
-  }
-  else{
-    Serial.print("IR=");
-    Serial.print(irValue);
-    Serial.print(", BPM=");
-    Serial.print(beatsPerMinute);
-    Serial.print(", Avg BPM=");
-    Serial.print(beatAvg);
+    // pretvaranje brojeva u char array (tekst) posto pubsubclient salje samo karaktere 
+    dtostrf(beatsPerMinute, 1, 2, tempStringBPM);    // decimal to string
+    dtostrf(beatAvg, 1, 0, tempStringAvg);             // 1 je minimalna sirina celog niza karaktera, 2 je koliko decmala
+    ltoa(irValue, tempStringIR, 10);             // mora ascii psoto je long prevelik, 10 je osnovni dekadni sistem
 
+    if (irValue < 50000) {
+      // ako nema prsta, salje se poruka gde su vrednosti nula
+      client.publish("ftn/oksimetar/bpm", "0");
+      client.publish("ftn/oksimetar/avg_bpm", "0");
+      client.publish("ftn/oksimetar/status", "No finger?");
+      Serial.println("MQTT: Nema prsta.");
+    } else {
+      // ako je prst tu, posalji sve vrednosti
+      client.publish("ftn/oksimetar/bpm", tempStringBPM);
+      client.publish("ftn/oksimetar/avg_bpm", tempStringAvg);
+      client.publish("ftn/oksimetar/ir", tempStringIR);
+      client.publish("ftn/oksimetar/status", "Izmereno");
+      
+      Serial.print("MQTT Poslato");
+      Serial.print("IR=");
+      Serial.print(irValue);
+      Serial.print(", BPM=");
+      Serial.print(beatsPerMinute);
+      Serial.print(", Avg BPM=");
+      Serial.print(beatAvg);
+
+    }
   }
+
   Serial.println();
 
   particleSensor.nextSample(); 
   delay(10);
 }
+
+void setup_wifi(){   // funkcija za pvoezivanje na wifi
+  delay(10);
+
+  Serial.println();
+  Serial.print("Povezujem se na ");
+  Serial.println(ssid);
+
+  // stavi u mode klijenta
+  WiFi.mode(WIFI_STA);
+
+  // probaj da se konektujes na ftn wifi
+  WiFi.begin(ssid, password);
+
+  // dokle god se ne poveze nemoj nista raditi
+   while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.print("Povezan na WiFi. ");
+}
+
+
+
+void callback(char* topic, byte* message, unsigned int length){      // za sad ne znamo sta bi esp mogao da prima od poruka
+  Serial.print("Message arrived on topic: ");
+  Serial.print(topic);
+  Serial.print(". Message: ");
+  String messageTemp;
+
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)message[i]);
+    messageTemp += (char)message[i];
+  }
+  Serial.println();
+}
+
+void reconnect(){               // povezivanje esp32 na mqtt broker
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+
+    String clientId = "ESP32C6Client";
+     // Attempt to connect
+    if (client.connect("clientId")) {      // posto je server postavljen u setup-u, klijent se povezuje nna njega - mqtt broker //  povezuje se na server sa id ESP32C6Client
+      Serial.println("connected");
+      client.subscribe("esp32/output");     // ne mora jer jos ne znamo koje poruke ce s aprima
+    }else{
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
 
 
