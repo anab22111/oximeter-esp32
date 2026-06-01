@@ -32,13 +32,14 @@
 const char* ssid = "FTN_wifi";
 const char* password = "ftn12345";
 
-const char* mqtt_server = "broker.hivemq.com";    // koristimo javni mqtt broker
+const char* mqtt_server = "10.1.150.208 ";    // koristimo javni mqtt broker
 
 WiFiClient espClient;              // iz Wifi.h biblioteke, koristi se da otvori vezu i slaj esiorve podatke preko interneta
 PubSubClient client(espClient);    // iz Pubsubclient.h biblioteke, PubSubClient pravi klijenta koji na MQTT protokol, ali nema pristup wifi, tako da mu se prosledjuje WiFiCLient
 long lastMsg = 0;
 char msg[50];
 int value = 0;
+const int sendInterval = 2000;
 
 MAX30105 particleSensor;
 
@@ -98,7 +99,8 @@ void loop()
     long delta = millis() - lastBeat;
     lastBeat = millis();
 
-    beatsPerMinute = 60 / (delta / 1000.0);
+    //beatsPerMinute = 60 / (delta / 1000.0);
+    beatsPerMinute = 60000.0 / (float)delta;
 
     if (beatsPerMinute < 255 && beatsPerMinute > 20)
     {
@@ -154,7 +156,7 @@ void loop()
 
   Serial.println();
 
-  particleSensor.nextSample(); 
+  //particleSensor.nextSample(); 
   delay(10);
 }
 
