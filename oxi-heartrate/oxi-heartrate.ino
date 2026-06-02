@@ -93,27 +93,40 @@ void loop()
 
   long irValue = particleSensor.getIR();
 
-  if (checkForBeat(irValue) == true)
-  {
-    //We sensed a beat!
-    long delta = millis() - lastBeat;
-    lastBeat = millis();
-
-    //beatsPerMinute = 60 / (delta / 1000.0);
-    beatsPerMinute = 60000.0 / (float)delta;
-
-    if (beatsPerMinute < 255 && beatsPerMinute > 20)
+  // Ako nema prsta na senzoru (vrednost niska), resetuj sve na nulu
+  if(irValue < 50000){
+    beatsPerMinute = 0;
+    beatAvg = 0;
+    rateSpot = 0;
+    for (byte x = 0; x < RATE_SIZE; x++) rates[x] = 0;
+  }
+  else{
+    if (checkForBeat(irValue) == true)
     {
-      rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
-      rateSpot %= RATE_SIZE; //Wrap variable
+      //We sensed a beat!
+      long delta = millis() - lastBeat;
+      lastBeat = millis();
 
-      //Take average of readings
-      beatAvg = 0;
-      for (byte x = 0 ; x < RATE_SIZE ; x++)
-        beatAvg += rates[x];
-      beatAvg /= RATE_SIZE;
+      //beatsPerMinute = 60 / (delta / 1000.0);
+      float calculatedBPM = 60000.0 / (float)delta;
+
+      if(calculatedBPM >= 50.0 && calculatedBPM <= 165.0)
+      {
+        beatsPerMinute = calculatedBPM;
+        
+        rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
+        rateSpot %= RATE_SIZE; //Wrap variable
+
+        //Take average of readings
+        beatAvg = 0;
+        for (byte x = 0 ; x < RATE_SIZE ; x++)
+          beatAvg += rates[x];
+        beatAvg /= RATE_SIZE;
+      }
     }
   }
+
+  
 
   // slanje poruke
   long now = millis();
