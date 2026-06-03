@@ -32,7 +32,7 @@
 const char* ssid = "FTN_wifi";
 const char* password = "ftn12345";
 
-const char* mqtt_server = "10.1.150.208 ";    // koristimo javni mqtt broker
+const char* mqtt_server = "10.0.2.15 ";    // koristimo javni mqtt broker
 
 WiFiClient espClient;              // iz Wifi.h biblioteke, koristi se da otvori vezu i slaj esiorve podatke preko interneta
 PubSubClient client(espClient);    // iz Pubsubclient.h biblioteke, PubSubClient pravi klijenta koji na MQTT protokol, ali nema pristup wifi, tako da mu se prosledjuje WiFiCLient
@@ -93,25 +93,31 @@ void loop()
 
   long irValue = particleSensor.getIR();
 
-  if (checkForBeat(irValue) == true)
-  {
-    //We sensed a beat!
-    long delta = millis() - lastBeat;
-    lastBeat = millis();
-
-    //beatsPerMinute = 60 / (delta / 1000.0);
-    beatsPerMinute = 60000.0 / (float)delta;
-
-    if (beatsPerMinute < 255 && beatsPerMinute > 20)
+  if(irValue < 50000){
+    // ako nema prsta ne punimo bafer sa vrednostima
+    beatsPerMinute = 0;
+    beatAvg = 0;
+  }else{
+   if (checkForBeat(irValue) == true)
     {
-      rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
-      rateSpot %= RATE_SIZE; //Wrap variable
+      //We sensed a beat!
+      long delta = millis() - lastBeat;
+      lastBeat = millis();
 
-      //Take average of readings
-      beatAvg = 0;
-      for (byte x = 0 ; x < RATE_SIZE ; x++)
-        beatAvg += rates[x];
-      beatAvg /= RATE_SIZE;
+      //beatsPerMinute = 60 / (delta / 1000.0);
+      beatsPerMinute = 60000.0 / (float)delta;
+
+      if (beatsPerMinute < 255 && beatsPerMinute > 20)
+      {
+        rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
+        rateSpot %= RATE_SIZE; //Wrap variable
+
+        //Take average of readings
+        beatAvg = 0;
+        for (byte x = 0 ; x < RATE_SIZE ; x++)
+          beatAvg += rates[x];
+        beatAvg /= RATE_SIZE;
+      }
     }
   }
 
