@@ -29,11 +29,16 @@ def on_message(client, userdata, message):
     if topic == "ftn/oksimetar/bpm":
         if payload == "0.1":
             print("[INFO] Prst registrovan, stabilizacija senzora...")
+        elif payload == "0":
+            print("Trenutni puls: -- BPM (Čeka se stabilizacija)")
         else:
             print(f"Trenutni puls: {payload} BPM")
-        
-    elif topic == "ftn/oksimetar/avg_bpm":
-        print(f"Prosečan puls(Medijana): {payload} BPM")
+
+    elif topic == "ftn/oksimetar/spo2":
+        if payload == "0":
+            print("Zasićenost kiseonikom (SpO2): -- % [PODACI NISU VALIDNI - bafer se puni]")
+        else:
+            print(f"Zasićenost kiseonikom (SpO2): {payload}% [PODACI VALIDNI]")
         
     elif topic == "ftn/oksimetar/ir":
         print(f"Sirovi IR signal: {payload}")
@@ -49,8 +54,6 @@ def on_message(client, userdata, message):
                 pygame.mixer.music.play(-1)
                 
         else:
-            #print("Alarm uspešno utišan.")
-            
             # Čim se prst vrati, stopiraj reprodukciju zvuka
             pygame.mixer.music.stop()
 
