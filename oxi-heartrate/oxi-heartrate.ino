@@ -16,6 +16,14 @@ long lastMsg = 0;
 const int sendInterval = 2000; 
 
 // ================= SENZOR podesavanja =================
+struct __attribute__((packed)) Oksimetar {
+  int32_t bpm;       // 4 bajta (heartRate / lastValidBPM)
+  int32_t spo2;      // 4 bajta (spo2)
+  int32_t ir;        // 4 bajta (irValue)
+  int8_t validBPM;   // 1 bajt  (validHeartRate: 0 ili 1)
+  int8_t validSPO2;  // 1 bajt  (validSPO2: 0 ili 1)
+};
+
 MAX30105 particleSensor;
 
 #define BUFFER_SIZE 100
@@ -119,14 +127,13 @@ void loop() {
     }
   }
 
-  // ================= MQTT SLANJE PODATAKA =================
+  // ================= MQTT SLANJE PODATAKA (BINARNO) =================
   long now = millis();
   if (now - lastMsg > sendInterval) {
     lastMsg = now;
-    
-    char tempStringBPM[8];
-    char tempStringSPO2[8];
-    char tempStringIR[12];
+  
+    Oksimetar paket;
+    memset(&paket, 0, sizeof(paket));
 
     // za pamcenje prethdih vrendsit
     static int32_t lastValidBPM = 75;
@@ -134,39 +141,53 @@ void loop() {
     // ako algoritam vrati validan prst upisi ga, inace posalji 0
     if (validHeartRate == 1 && heartRate > 40 && heartRate < 180 && irValue > 20000) {
       lastValidBPM = (lastValidBPM * 0.7) + (heartRate * 0.3);  // 70% stare 30% nove
-      ltoa(lastValidBPM, tempStringBPM, 10);
+      //ltoa(lastValidBPM, tempStringBPM, 10);
+      paket.bpm = lastValidBPM;
+      paket.validBPM = 1;
     }else {
       // Ako je prst tu ali trenutno računa, zadrži poslednji dobar puls umesto nule
       if (irValue > 20000 && lastValidBPM > 0) {
-        ltoa(lastValidBPM, tempStringBPM, 10);
+        //ltoa(lastValidBPM, tempStringBPM, 10);
+        paket.bpm = lastValidBPM;
+        paket.validBPM = 0;
       } else {
-        strcpy(tempStringBPM, "0");
+        //strcpy(tempStringBPM, "0");
+        paket.bpm = 0;
+        paket.validBPM = 0;
       }
     }
     // ako algoritam vrati validan SpO2
     if (validSPO2 == 1 && spo2 > 70 && spo2 <= 100 && irValue > 20000) {
-      ltoa(spo2, tempStringSPO2, 10);
+      //ltoa(spo2, tempStringSPO2, 10);
+      paket.spo2 = spo2;
+      paket.validSPO2 = 1;
     } else {
-      strcpy(tempStringSPO2, "0");
+      //strcpy(tempStringSPO2, "0");
+      paket.spo2 = 0;
+      paket.validSPO2 = 0;
     }
     
-    ltoa(irValue, tempStringIR, 10);
+    //ltoa(irValue, tempStringIR, 10);
+    paket.ir = irValue;
 
     if (irValue < 20000) {
-      client.publish("ftn/oksimetar/bpm", "0");
-      client.publish("ftn/oksimetar/spo2", "0");
-      client.publish("ftn/oksimetar/status", "No finger?");
-      Serial.println("MQTT: Nema prsta.");
+      paket.bpm = 0;
+      paket.spo2 = 0;
+      paket.validBPM = 0;
+      paket.validSPO2 = 0;
+
+      client.publish("ftn/oksimetar/binarno", (uint8_t*)&paket, sizeof(paket));
+      Serial.println("MQTT: Nema prsta (Poslat prazan binarni paket).");
     } else {
-      client.publish("ftn/oksimetar/bpm", tempStringBPM);
-      client.publish("ftn/oksimetar/spo2", tempStringSPO2);
-      client.publish("ftn/oksimetar/ir", tempStringIR);
-      client.publish("ftn/oksimetar/status", bufferFull ? "Izmereno" : "Punjenje bafera...");
+      client.publish("ftn/oksimetar/binarno", (uint8_t*)&paket, sizeof(paket));
       
       Serial.print("MQTT Poslato -> ");
-      Serial.print("BPM: "); Serial.print(tempStringBPM);
-      Serial.print(" | SpO2: "); Serial.print(tempStringSPO2);
-      Serial.print("% | Validnost (HR/SpO2): "); Serial.print(validHeartRate); Serial.print("/"); Serial.println(validSPO2);
+      Serial.print("BPM: "); Serial.print(paket.bpm);
+      Serial.print(" | SpO2: "); Serial.print(paket.spo2);
+      Serial.print("% | Validnost (HR/SpO2): "); 
+      Serial.print(validHeartRate); 
+      Serial.print("/"); 
+      Serial.println(validSPO2);
     }
   }
 
