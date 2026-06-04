@@ -32,7 +32,7 @@
 const char* ssid = "FTN_wifi";
 const char* password = "ftn12345";
 
-const char* mqtt_server = "10.1.148.251";    // koristimo javni mqtt broker
+const char* mqtt_server = "10.0.2.15 ";    // koristimo javni mqtt broker
 
 WiFiClient espClient;              // iz Wifi.h biblioteke, koristi se da otvori vezu i slaj esiorve podatke preko interneta
 PubSubClient client(espClient);    // iz Pubsubclient.h biblioteke, PubSubClient pravi klijenta koji na MQTT protokol, ali nema pristup wifi, tako da mu se prosledjuje WiFiCLient
@@ -50,26 +50,6 @@ long lastBeat = 0; //Time at which the last beat occurred
 
 float beatsPerMinute;
 int beatAvg;
-
-bool prethodnoStanjePrsta = false;
-
-// Pomoćna funkcija za računanje medijane
-byte getMedianHeartRate() {
-  byte sortedRates[RATE_SIZE];
-  for (byte i = 0; i < RATE_SIZE; i++) sortedRates[i] = rates[i];
-
-  // Bubble sort
-  for (byte i = 0; i < RATE_SIZE - 1; i++) {
-    for (byte j = 0; j < RATE_SIZE - i - 1; j++) {
-      if (sortedRates[j] > sortedRates[j + 1]) {
-        byte temp = sortedRates[j];
-        sortedRates[j] = sortedRates[j + 1];
-        sortedRates[j + 1] = temp;
-      }
-    }
-  }
-  return sortedRates[RATE_SIZE / 2];
-}
 
 void setup()
 {
@@ -112,14 +92,11 @@ void loop()
   client.loop();      // pokreni klijenta da slusa poruke
 
   long irValue = particleSensor.getIR();
-  bool prstPrisutan = (irValue > 50000);
 
-  if(!prstPrisutan){
+  if(irValue < 50000){
     // ako nema prsta ne punimo bafer sa vrednostima
     beatsPerMinute = 0;
     beatAvg = 0;
-    rateSpot = 0;
-    memset(rates, 0, sizeof(rates)); // Resetuj istoriju odmah
   }else{
    if (checkForBeat(irValue) == true)
     {
@@ -130,23 +107,23 @@ void loop()
       //beatsPerMinute = 60 / (delta / 1000.0);
       beatsPerMinute = 60000.0 / (float)delta;
 
-      if (beatsPerMinute < 220 && beatsPerMinute > 40)
+      if (beatsPerMinute < 255 && beatsPerMinute > 20)
       {
-        if (beatAvg == 0 || abs(beatsPerMinute - beatAvg) < 20.0) {
-          rates[rateSpot++] = (byte)beatsPerMinute;
-          rateSpot %= RATE_SIZE;
-          beatAvg = getMedianHeartRate(); // Računanje medijane
-        }
+        rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
+        rateSpot %= RATE_SIZE; //Wrap variable
+
+        //Take average of readings
+        beatAvg = 0;
+        for (byte x = 0 ; x < RATE_SIZE ; x++)
+          beatAvg += rates[x];
+        beatAvg /= RATE_SIZE;
       }
     }
   }
 
-  bool upravoIzvadjen = (prethodnoStanjePrsta == true && prstPrisutan == false);
-  bool upravoVracen = (prethodnoStanjePrsta == false && prstPrisutan == true);
-
+  // slanje poruke
   long now = millis();
-
-  if (now - lastMsg > sendInterval || upravoIzvadjen || upravoVracen) {
+  if(now - lastMsg > sendInterval){
     lastMsg = now;
     
     // priprema stringova za slanje
@@ -159,7 +136,7 @@ void loop()
     dtostrf(beatAvg, 1, 0, tempStringAvg);             // 1 je minimalna sirina celog niza karaktera, 2 je koliko decmala
     ltoa(irValue, tempStringIR, 10);             // mora ascii psoto je long prevelik, 10 je osnovni dekadni sistem
 
-    if (!prstPrisutan) {
+    if (irValue < 50000) {
       // ako nema prsta, salje se poruka gde su vrednosti nula
       client.publish("ftn/oksimetar/bpm", "0");
       client.publish("ftn/oksimetar/avg_bpm", "0");
@@ -167,14 +144,10 @@ void loop()
       Serial.println("MQTT: Nema prsta.");
     } else {
       // ako je prst tu, posalji sve vrednosti
-      if (upravoVracen && beatAvg == 0) {
-        client.publish("ftn/oksimetar/bpm", "0.1");
-      } else {
-        client.publish("ftn/oksimetar/bpm", tempStringBPM);
-      }
+      client.publish("ftn/oksimetar/bpm", tempStringBPM);
       client.publish("ftn/oksimetar/avg_bpm", tempStringAvg);
       client.publish("ftn/oksimetar/ir", tempStringIR);
-      client.publish("ftn/oksimetar/status", "ALARM UGASEN: Prst vracen!");
+      client.publish("ftn/oksimetar/status", "Izmereno");
       
       Serial.print("MQTT Poslato");
       Serial.print("IR=");
@@ -188,7 +161,6 @@ void loop()
   }
 
   Serial.println();
-  prethodnoStanjePrsta = prstPrisutan;
 
   //particleSensor.nextSample(); 
   delay(10);
@@ -249,5 +221,6 @@ void reconnect(){               // povezivanje esp32 na mqtt broker
     }
   }
 }
+
 
 
