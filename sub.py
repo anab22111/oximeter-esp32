@@ -94,3 +94,7 @@ except Exception as e:
 
 # Pokretanje beskonačne petlje koja drži skriptu aktivnom i sluša mrežu
 laptop_client.loop_forever()
+
+
+
+#analitika prikaz za ssvakog korisnika da li su kriticni podaci plot 

@@ -7,7 +7,7 @@
 // ================= MREZNA podesavanje =================
 const char* ssid = "FTN_wifi";
 const char* password = "ftn12345";
-const char* mqtt_server = "10.1.148.251"; 
+const char* mqtt_server = "10.1.147.36"; 
 
 WiFiClient espClient;
 PubSubClient client(espClient);
