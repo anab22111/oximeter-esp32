@@ -3,12 +3,23 @@ import os
 import time
 import pygame
 import struct
+import json
+from flask import Flask, render_template
+from flask_socketio import SocketIO, emit
+import neurokit2 as nk
+import numpy as np
+
+# =====================================================================
+# 1. INICIJALIZACIJA FLASK, SOCKETIO I PYGAME ALARMA
+# =====================================================================
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'ppg_tajna'
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 pygame.mixer.init()
 ZVUK_ALARMA = "oxi.mp3"
 
 try:
-    # Dobijamo tacnu apsolutnu putanju do foldera u kom se nalazi skripta
     trenutni_folder = os.path.dirname(os.path.abspath(__file__))
     putanja_do_zvuka = os.path.join(trenutni_folder, ZVUK_ALARMA)
     
@@ -20,22 +31,49 @@ try:
 except Exception as e:
     print(f"[GRESKA] Neuspesno ucitavanje zvuka: {e}")
 
+# =====================================================================
+# 2. SIGNAL PROCESSOR KLASA
+# =====================================================================
+class SignalProcessor:
+    def __init__(self, sampling_rate=50):
+        self.sampling_rate = sampling_rate
 
+    def filter_for_plot(self, ir_niz):
+        try:
+            if max(ir_niz) == min(ir_niz):
+                return [0.0] * len(ir_niz)
+            
+            signal = np.array(ir_niz)
+            cleaned = nk.ppg_clean(signal, sampling_rate=self.sampling_rate, method='elgendi')
+            norm_signal = (cleaned - np.min(cleaned)) / (np.max(cleaned) - np.min(cleaned))
+            
+            # Okrećemo signal da na sajtu pikovi idu prema gore
+            norm_signal = 1.0 - norm_signal
+            return norm_signal.tolist()
+        except Exception:
+            return []
+
+procesor = SignalProcessor(sampling_rate=50)
+moj_bafer = []
+
+# =====================================================================
+# 3. VAŠE PROMENLJIVE ZA SNIMANJE KORISNIKA
+# =====================================================================
 trenutni_korinsik = input("Unesite ime korisnika: ").strip()
-ime_fajla = f"merenje_{trenutni_korinsik}.txt" # Napravi fajl za upisivanje vrednosti datog korisnika
+ime_fajla = f"merenje_{trenutni_korinsik}.txt"
 
-# Definisanje promenljivih koje ce se koristiti pri snimanju podataka korisnika
-TRAJANJE_SNIMANJA = 30 # koliko sekundi cemo snimati korisnicke podatke
+TRAJANJE_SNIMANJA = 30 
 snimanje_zapoceto = False
 snimanje_zavrseno = False
 vreme_pocetka_snimanja = 0
 
-# Kreiranje lista gde ce se cuvati bpm i spo2 kako bi se posle izracunao prosek
 svi_validni_bpm = []
 svi_validni_spo2 = []
 detektovan_zastoj = False
 
-
+# =====================================================================
+# 4. POTPUNO USKLAĐENA LOGIKA OBRADE (MQTT -> Ekran + Fajl + Web sajt)
+# =====================================================================
 def obradi_binarno(client, userdata, message):
     global snimanje_zapoceto, snimanje_zavrseno, vreme_pocetka_snimanja
     global svi_validni_bpm, svi_validni_spo2, detektovan_zastoj
@@ -50,73 +88,80 @@ def obradi_binarno(client, userdata, message):
 
     print(f"Sirovi IR signal: {ir}")
 
-    # 1. Obrada i prikaz Pulsa (BPM)
+    # 1. Obrada i prikaz Pulsa (BPM) + Slanje sa ključem 'value' (kako HTML i traži)
     if ir < 20000:
         print("Trenutni puls: -- BPM (Nema prsta)")
-        # Ukoliko je snimanje zapoceto i detektovano je da nema prsta - simulacija da nema otkucaja
-        # Postavi flag da je detektovan zastoj
+        socketio.emit('update_bpm', {'value': '--'})  
         if snimanje_zapoceto == True: 
             detektovan_zastoj = True
-
     elif validBPM == 1:
         print(f"Trenutni puls: {bpm} BPM")
+        socketio.emit('update_bpm', {'value': str(bpm)})  
+        if ir >= 20000 and not snimanje_zavrseno:
+            svi_validni_bpm.append(bpm)
     else:
         print(f"Trenutni puls: {bpm} BPM (Stabilizacija / Proracun...)")
+        socketio.emit('update_bpm', {'value': '--'})
 
-    # 2. Obrada i prikaz Kiseonika (SpO2)
+    # 2. Obrada i prikaz Kiseonika (SpO2) + Slanje sa ključem 'value'
     if ir < 20000:
         print("Zasicenost kiseonikom (SpO2): -- % (Nema prsta)")
+        socketio.emit('update_spo2', {'value': '--'})
     elif validSPO2 == 1:    
         print(f"Zasicenost kiseonikom (SpO2): {spo2}% [PODACI VALIDNI]")
+        socketio.emit('update_spo2', {'value': str(spo2)})  # HTML sam radi toFixed(2), šaljemo čist broj/string
         if spo2 < 94:
             print("[UPOZORENJE] Kriticno nizak nivo kiseonika")
+        if ir >= 20000 and spo2 > 0 and not snimanje_zavrseno:
+            svi_validni_spo2.append(spo2)
     else:
         print("Zasicenost kiseonikom (SpO2): -- % [Ceka se merenje - bafer se puni]")
+        socketio.emit('update_spo2', {'value': '--'})
 
-    # 3. Upravljanje Alarmom (Logika zasnovana na prisustvu prsta / IR signalu)
+    # 3. Upravljanje Alarmom
     if ir < 20000:
         print("Status senzora: No finger?")
         print("ALARM UKLJUCEN!")
-        
-        # Ako muzika vec ne svira, pokreni je u beskonacnoj petlji
         if not pygame.mixer.music.get_busy():
             pygame.mixer.music.play(-1)
     else:
         print("Status senzora: Prst detektovan / Merenje u toku...")
-        # Cim se prst vrati, stopiraj reprodukciju zvuka
         pygame.mixer.music.stop()
 
-        
-
-    # 4. Zapisivanje odredjenih vrednosti koje stizu da senzora
-    # Pokreni snimanje cim je detektovan prst
+    # 4. Pokretanje snimanja na osnovu prisustva prsta
     if ir >= 20000 and not snimanje_zapoceto and not snimanje_zavrseno:
         snimanje_zapoceto = True 
         vreme_pocetka_snimanja = time.time()
         print(f"Prst je detektovan. Zapoceto je snimanje za korisnika: {trenutni_korinsik}")
     
-
-    if snimanje_zapoceto and not snimanje_zavrseno:
-        if ir >= 20000:
-            svi_validni_bpm.append(bpm)
-        
-        if validSPO2 == 1 and spo2 > 0:
-            svi_validni_spo2.append(spo2)
-
     print("-"*40)
 
 
 def obradi_sirovo(client, userdata, message):
+    socketio.emit('update_bpm', {'value':'999'}, namespace='/')
     global snimanje_zapoceto, snimanje_zavrseno, vreme_pocetka_snimanja
-    global svi_validni_bpm, svi_validni_spo2, detektovan_zastoj
+    global svi_validni_bpm, svi_validni_spo2, detektovan_zastoj, moj_bafer
 
     try:
         sirovi_ir = int(message.payload.decode("utf-8"))
     except:
-        return # Zaštita od lošeg paketa
+        return 
 
-    # --- OVDE JE SADA OKIDAČ SNIMANJA (Rešava problem neupisivanja) ---
-    # Čim stigne prva brza IR vrednost gde je prst tu, ODMAH otvaramo novi fajl
+    # --- WEB PLOT BAFEROVANJE + Slanje sa ključem 'niz' (kako HTML i traži) ---
+    if sirovi_ir >= 20000:
+        moj_bafer.append(sirovi_ir)
+        if len(moj_bafer) > 200:
+            moj_bafer.pop(0)
+
+        if len(moj_bafer) == 200:
+            try:
+                cisti_niz = procesor.filter_for_plot(moj_bafer)
+                if cisti_niz:
+                    socketio.emit('new_ppg_data', {'niz': cisti_niz})
+            except Exception:
+                pass
+
+    # --- VAŠA ORIGINALNA LOGIKA ZA KREIRANJE I UPIS U FAJL ---
     if sirovi_ir >= 20000 and not snimanje_zapoceto and not snimanje_zavrseno:
         snimanje_zapoceto = True 
         vreme_pocetka_snimanja = time.time()
@@ -134,8 +179,6 @@ def obradi_sirovo(client, userdata, message):
 
         if preostalo_vreme > 0:
             vreme_ms = int((trenutno_vreme - vreme_pocetka_snimanja) * 1000)
-
-            sirovi_ir = int(message.payload.decode("utf-8"))
             with open(ime_fajla, "a") as file:
                 file.write(f"{vreme_ms},{sirovi_ir}\n")
         else:
@@ -146,12 +189,10 @@ def obradi_sirovo(client, userdata, message):
             konacni_spo2 = int(sum(svi_validni_spo2)/len(svi_validni_spo2) if svi_validni_spo2 else 0)
 
             if detektovan_zastoj:
-                # Tvoja provera: ako je u listi poslednji sačuvan bio 0, forsira nule
                 if svi_validni_bpm and svi_validni_bpm[-1] == 0:
                     with open(ime_fajla, "a") as file:
                         file.write(f"\nStatus: KRITICNO\nKonacan_BPM:0\nKonacan_SpO2:0\n")  
                 else:
-                    # Ako je zastoj detektovan, ali lista nema nulu na kraju (izvucite zakljucak)
                     with open(ime_fajla, "a") as file:
                         file.write(f"\nStatus: KRITICNO (ZASTOJ TOKOM MERENJA)\nKonacan_BPM:{konacni_bpm}\nKonacan_SpO2:{konacni_spo2}\n")
             else:
@@ -161,39 +202,52 @@ def obradi_sirovo(client, userdata, message):
                     status = "NORMALNO"
 
                 with open(ime_fajla, "a") as file:
-                        file.write(f"\nStatus: {status}\nKonacan_BPM:{konacni_bpm}\nKonacan_SpO2:{konacni_spo2}\n")
+                    file.write(f"\nStatus: {status}\nKonacan_BPM:{konacni_bpm}\nKonacan_SpO2:{konacni_spo2}\n")
+            print(f"\n[SISTEM] Merenje za korisnika {trenutni_korinsik} je zavrseno i uspesno sacuvano!")
 
-
-
-
-# Funkcija koja potvrđuje da se laptop uspesno povezao na HiveMQ
+# =====================================================================
+# 5. POKRETANJE MQTT-A I WEB SERVERA
+# =====================================================================
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print("[USPESNO] Laptop je povezan na HiveMQ broker!")
-        # Laptop se pretplacuje na sve tvoje teme odjednom koristeci džoker znak '#'
-        # 'ftn/oksimetar/#' znaci: "Slusaj sve sto pocinje sa ftn/oksimetar/"
+        print("[USPESNO] Laptop je povezan na lokalni MQTT broker!")
         client.subscribe("ftn/oksimetar/binarno")
         client.subscribe("ftn/oksimetar/sirovo")
-        print("Slušam binarni stream sa ESP32-C6... (Pritisni Ctrl+C za prekid)\n")
+        print("Slušam podatke sa ESP32 i pokrećem Web sajt...\n")
     else:
         print(f"[GRESKA] Povezivanje neuspesno, kod greske: {rc}")
 
-# Inicijalizacija MQTT klijenta na laptopu
-laptop_client = mqtt.Client()
+def pokreni_mqtt_u_pozadini():
+    laptop_client = mqtt.Client()
+    laptop_client.on_connect = on_connect
+    laptop_client.message_callback_add("ftn/oksimetar/binarno", obradi_binarno)
+    laptop_client.message_callback_add("ftn/oksimetar/sirovo", obradi_sirovo)
+    
+    try:
+        laptop_client.connect("localhost", 1883, 60)
+        laptop_client.loop_start()  
+    except Exception as e:
+        print(f"Ne mogu da se povežem na broker: {e}")
+        exit()
 
-# Dodeljujemo funkcije za rukovanje događajima
-laptop_client.on_connect = on_connect
-laptop_client.message_callback_add("ftn/oksimetar/binarno", obradi_binarno)
-laptop_client.message_callback_add("ftn/oksimetar/sirovo", obradi_sirovo)
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-# Povezivanje na javni server koji si izabrala u Arduinu
-try:
-    laptop_client.connect("localhost", 1883, 60)
-except Exception as e:
-    print(f"Ne mogu da se povežem na broker: {e}")
-    exit()
+@socketio.on('update_bpm')
+def handle_bpm(data):
+    emit('update_bpm', data, broadcast=True)
 
-# Pokretanje beskonacne petlje koja drži skriptu aktivnom i slusa mrežu
-laptop_client.loop_forever()
+#3. Slušalac za SpO2 podatke koji stižu iz sub.py
+@socketio.on('update_spo2')
+def handle_spo2(data):
+    emit('update_spo2', data, broadcast=True)
 
-#analitika prikaz za ssvakog korisnika da li su kriticni podaci plot 
+#4. Slušalac za niz tačaka za PPG grafik koji stiže iz sub.py
+@socketio.on('new_ppg_data')
+def handle_ppg(data):
+    emit('new_ppg_data', data, broadcast=True)
+
+if __name__ == '__main__':
+    pokreni_mqtt_u_pozadini()
+    socketio.run(app, host='0.0.0.0', port=5000)

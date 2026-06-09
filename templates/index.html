@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioMonitor - Real-time PPG</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #0b0e14;
+            color: #ecf0f1;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            width: 100%;
+            padding: 20px;
+            background-color: #1c252e;
+            text-align: center;
+            border-bottom: 2px solid #3498db;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            padding: 30px;
+            max-width: 1200px;
+        }
+        .card {
+            background-color: #1c252e;
+            border-radius: 15px;
+            padding: 20px;
+            min-width: 200px;
+            text-align: center;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            border: 1px solid #2c3e50;
+        }
+        .value {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #2ecc71;
+            margin: 10px 0;
+        }
+        .label {
+            font-size: 1.2rem;
+            color: #bdc3c7;
+            text-transform: uppercase;
+        }
+        .chart-container {
+            background-color: #1c252e;
+            border-radius: 15px;
+            padding: 20px;
+            width: 100%;
+            max-width: 900px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            border: 1px solid #2c3e50;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 0.8rem;
+        }
+        .online { color: #2ecc71; }
+        .offline { color: #e74c3c; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Sistem za monitoring pacijenta</h1>
+        <div id="status">Status veze: <span id="status-text" class="offline">Diskonektovan</span></div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <div class="label">Otkucaji (BPM)</div>
+            <div id="bpm-val" class="value">--</div>
+            <div style="color: #e74c3c; font-size: 1.5rem;"></div>
+        </div>
+
+        <div class="card">
+            <div class="label">Zasićenje (SpO2)</div>
+            <div id="spo2-val" class="value" style="color: #3498db;">--</div>
+            <div style="color: #3498db;">%</div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="ppgChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Povezivanje na Socket.IO server
+        const socket = io("http://10.1.144.161:5000");
+        const statusText = document.getElementById('status-text');
+
+        socket.on('connect', () => {
+            statusText.innerText = 'Povezan';
+            statusText.className = 'online';
+        });
+
+        socket.on('disconnect', () => {
+            statusText.innerText = 'Prekid veze';
+            statusText.className = 'offline';
+        });
+
+        // Inicijalizacija grafikona
+        const ctx = document.getElementById('ppgChart').getContext('2d');
+        const ppgChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array.from({length: 200}, (_, i) => i),
+                datasets: [{
+                    label: 'PPG Signal (Infrared)',
+                    data: [],
+                    borderColor: '#2ecc71',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0.4,
+                    fill: true,
+                    backgroundColor: 'rgba(46, 204, 113, 0.1)'
+                }]
+            },
+            options: {
+                responsive: true,
+                animation: false,
+                scales: {
+                    x: { display: false },
+                    y: { 
+                        min: 0, 
+                        max: 1,
+                        grid: { color: '#2c3e50' }
+                    }
+                },
+                plugins: {
+                    legend: { labels: { color: '#ecf0f1' } }
+                }
+            }
+        });
+
+        // Slušanje podataka
+        socket.on('update_bpm', (data) => {
+            document.getElementById('bpm-val').innerText = data.value;
+        });
+
+        socket.on('update_spo2', (data) => {
+            let v = parseFloat(data.value);
+            // Ako je nula ili nije broj, ispiši 0.00, inače zaokruži
+            document.getElementById('spo2-val').innerText = (isNaN(v) || v <= 0) ? "0.00" : v.toFixed(2);
+        });
+
+
+        socket.on('new_ppg_data', (data) => {
+            const y = Array.isArray(data.niz) ? data.niz : [];
+            ppgChart.data.labels=Array.from({length:y.length}, (_,i) => i);
+            ppgChart.data.datasets[0].data = y;
+            ppgChart.update('none'); // Osvežavanje bez laga
+        });
+    </script>
+</body>
+</html>
