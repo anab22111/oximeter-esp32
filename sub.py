@@ -56,8 +56,8 @@ def on_message(client, userdata, message):
         # 1. Obrada i prikaz Pulsa (BPM)
         if ir < 20000:
             print("Trenutni puls: -- BPM (Nema prsta)")
-            // Ukoliko je snimanje zapoceto i detektovano je da nema prsta - simulacija da nema otkucaja
-            // Postavi flag da je detektovan zastoj
+            # Ukoliko je snimanje zapoceto i detektovano je da nema prsta - simulacija da nema otkucaja
+            # Postavi flag da je detektovan zastoj
             if snimanje_zapoceto == True: 
                 detektovan_zastoj = True
 
@@ -141,7 +141,7 @@ def on_message(client, userdata, message):
 
                     with open(ime_fajla, "a") as file:
                             file.write(f"\nStatus: {status}\nKonacan_BPM:{konacni_bpm}\nKonacan_SpO2:{konacni_spo2}\n") 
-         print("-" * 40) 
+        print("-" * 40) 
 
 # Funkcija koja potvrđuje da se laptop uspesno povezao na HiveMQ
 def on_connect(client, userdata, flags, rc):
