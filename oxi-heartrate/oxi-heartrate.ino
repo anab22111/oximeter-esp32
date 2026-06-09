@@ -129,6 +129,13 @@ void loop() {
         particleSensor.nextSample(); // pomeranje unutrasnjeg pointer senzora za sl krug
       }
 
+      // slanje i tokom punjenja bafera
+      if (irBuffer[i] >= 20000) {
+          char irSubString[12];
+          ltoa(irBuffer[i], irSubString, 10);
+          client.publish("ftn/oksimetar/sirovo", irSubString);
+        }
+
       // odmah racunanje sa noivm podacima
       maxim_heart_rate_and_oxygen_saturation(irBuffer, BUFFER_SIZE, redBuffer, &spo2, &validSPO2, &heartRate, &validHeartRate);
     }
