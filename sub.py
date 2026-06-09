@@ -115,7 +115,7 @@ def on_message(client, userdata, message):
 
                 # Otvori korisnikov fajl i upisi vrednosti
                 with open(ime_fajla, "a") as file:
-                    file.write(f"{vreme_ms},{ir}\n")
+                    file.write(f"{trenutno_vreme},{ir}\n")
             else:
                 # U suprotonom zaustavi snimanje
                 snimanje_zavrseno = True
@@ -123,7 +123,7 @@ def on_message(client, userdata, message):
 
                 konacni_bpm = int(sum(svi_validni_bpm)/len(svi_validni_bpm) if svi_validni_bpm else 0)
                 konacni_spo2 = int(sum(svi_validni_spo2)/len(svi_validni_spo2) if svi_validni_spo2 else 0)
-                print(f"\n Uspesno snimljen fiksni uzorak od {TRAJANJE_SNIMANJA_SEKUNDE}s u '{ime_fajla}'.")
+                print(f"\n Uspesno snimljen fiksni uzorak od {TRAJANJE_SNIMANJA}s u '{ime_fajla}'.")
                 
                 status = ""
                 # Ukoliko je detektovan zastoj prilikom snimanja
