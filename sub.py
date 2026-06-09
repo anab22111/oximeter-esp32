@@ -42,44 +42,9 @@ def on_message(client, userdata, message):
     global snimanje_zapoceto, snimanje_zavrseno, vreme_pocetka_snimanja
     global svi_validni_bpm, svi_validni_spo2, detektovan_zastoj
 
-    if topic == "ftn/oksimetar/sirovo" and snimanje_zapoceto and not snimanje_zavrseno:
-        trenutno_vreme = time.time()
-        preostalo_vreme = TRAJANJE_SNIMANJA - (trenutno_vreme - vreme_pocetka_snimanja)
-
-        if preostalo_vreme > 0:
-            vreme_ms = int((trenutno_vreme - vreme_pocetka_snimanja) * 1000)
-
-            sirovi_ir = int(message.payload.decode("utf-8"))
-            with open(ime_fajla, "a") as file:
-                file.write(f"{proteklo_vreme_ms},{sirovi_ir}\n")
-        else:
-            snimanje_zavrseno = True
-            snimanje_zapoceto = False
-
-            konacni_bpm = int(sum(svi_validni_bpm)/len(svi_validni_bpm) if svi_validni_bpm else 0)
-            konacni_spo2 = int(sum(svi_validni_spo2)/len(svi_validni_spo2) if svi_validni_spo2 else 0)
-
-            if detektovan_zastoj:
-                # Tvoja provera: ako je u listi poslednji sačuvan bio 0, forsira nule
-                if svi_validni_bpm and svi_validni_bpm[-1] == 0:
-                    with open(ime_fajla, "a") as file:
-                        file.write(f"\nStatus: KRITICNO\nKonacan_BPM:0\nKonacan_SpO2:0\n")  
-                else:
-                    # Ako je zastoj detektovan, ali lista nema nulu na kraju (izvucite zakljucak)
-                    with open(ime_fajla, "a") as file:
-                        file.write(f"\nStatus: KRITICNO (ZASTOJ TOKOM MERENJA)\nKonacan_BPM:{konacni_bpm}\nKonacan_SpO2:{konacni_spo2}\n")
-            else:
-                if konacni_spo2 < 94 and konacni_spo2 > 0:
-                    status = "KRITICNO"
-                else:
-                    status = "NORMALNO"
-
-                with open(ime_fajla, "a") as file:
-                     file.write(f"\nStatus: {status}\nKonacan_BPM:{konacni_bpm}\nKonacan_SpO2:{konacni_spo2}\n")
 
 
-
-    elif topic == "ftn/oksimetar/binarno":
+    if topic == "ftn/oksimetar/binarno":
         binary_payload = message.payload
     
         if len(binary_payload) != 14:
@@ -186,6 +151,42 @@ def on_message(client, userdata, message):
             #         with open(ime_fajla, "a") as file:
             #                 file.write(f"\nStatus: {status}\nKonacan_BPM:{konacni_bpm}\nKonacan_SpO2:{konacni_spo2}\n") 
         print("-" * 40) 
+        
+    elif topic == "ftn/oksimetar/sirovo" and snimanje_zapoceto and not snimanje_zavrseno:
+    trenutno_vreme = time.time()
+    preostalo_vreme = TRAJANJE_SNIMANJA - (trenutno_vreme - vreme_pocetka_snimanja)
+
+    if preostalo_vreme > 0:
+        vreme_ms = int((trenutno_vreme - vreme_pocetka_snimanja) * 1000)
+
+        sirovi_ir = int(message.payload.decode("utf-8"))
+        with open(ime_fajla, "a") as file:
+            file.write(f"{proteklo_vreme_ms},{sirovi_ir}\n")
+    else:
+        snimanje_zavrseno = True
+        snimanje_zapoceto = False
+
+        konacni_bpm = int(sum(svi_validni_bpm)/len(svi_validni_bpm) if svi_validni_bpm else 0)
+        konacni_spo2 = int(sum(svi_validni_spo2)/len(svi_validni_spo2) if svi_validni_spo2 else 0)
+
+        if detektovan_zastoj:
+            # Tvoja provera: ako je u listi poslednji sačuvan bio 0, forsira nule
+            if svi_validni_bpm and svi_validni_bpm[-1] == 0:
+                with open(ime_fajla, "a") as file:
+                    file.write(f"\nStatus: KRITICNO\nKonacan_BPM:0\nKonacan_SpO2:0\n")  
+            else:
+                # Ako je zastoj detektovan, ali lista nema nulu na kraju (izvucite zakljucak)
+                with open(ime_fajla, "a") as file:
+                    file.write(f"\nStatus: KRITICNO (ZASTOJ TOKOM MERENJA)\nKonacan_BPM:{konacni_bpm}\nKonacan_SpO2:{konacni_spo2}\n")
+        else:
+            if konacni_spo2 < 94 and konacni_spo2 > 0:
+                status = "KRITICNO"
+            else:
+                status = "NORMALNO"
+
+            with open(ime_fajla, "a") as file:
+                    file.write(f"\nStatus: {status}\nKonacan_BPM:{konacni_bpm}\nKonacan_SpO2:{konacni_spo2}\n")
+
 
 # Funkcija koja potvrđuje da se laptop uspesno povezao na HiveMQ
 def on_connect(client, userdata, flags, rc):
