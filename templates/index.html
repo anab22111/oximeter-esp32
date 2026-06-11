@@ -96,7 +96,7 @@
 
     <script>
         // Povezivanje na Socket.IO server
-        const socket = io("http://10.1.144.161:5000");
+        const socket = io();
         const statusText = document.getElementById('status-text');
 
         socket.on('connect', () => {
