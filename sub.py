@@ -243,6 +243,89 @@ def pokreni_mqtt_u_pozadini():
 def index():
     return render_template('index.html')
 
+# Nova stranica koja prikazuje listu svih pacijenata
+@app.route('/istorija')
+def history_list_page():
+    return render_template('history_list.html')
+
+# Stranica koja prikazuje grafikon za izabranog pacijenta
+@app.route('/istorija/grafikon')
+def history_char_page():
+    return render_template('history.html')
+
+# API koji skenira folder i vraca listu svih pronadjenih pacijenata
+@app.route('/api/pacijenti')
+def get_pacijenti():
+    pacijenti = []
+    trenutni_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Prolazimo kroz sve fajlove u folderu
+    for fajl in os.listdir(trenutni_dir):
+        if fajl.startswith("merenje_") and fajl.endswith(".txt"):
+            # Izvlacimo ime pacijenta iz naziva
+            ime = fajl.replace("merenje_", "").replace(".txt", "")
+            if ime:
+                pacijenti.append(ime)
+
+    # Imena se sortiraju po abecedi
+    pacijenti.sort()
+    return json.dumps({"pacijenti": pacijenti}), 200, {'Content-Type': 'application/json'}
+
+# API cita konkretan fajl izabranog pacijenta
+@app.route('/api/istorija/<korisnik>')
+def get_istorija(korisnik):
+    fajl_za_citanje = f"merenje_{korisnik}.txt"
+
+    if not os.path.exists(fajl_za_citanje):
+        return json.dumps({"status": "Greska", "poruka": f"Fajl {fajl_za_citanje} ne postoji."}), 404
+    
+    ir_signali = []
+    vreme_ms = []
+    status_merenja = "Nepoznato"
+    konacan_bpm = "--"
+    konacan_spo2 = "--"
+
+    try:
+        with open(fajl_za_citanje, "r") as file:
+            lines = file.readlines()
+
+        for line in lines:
+            line = line.strip()
+
+            if not line:
+                continue
+
+            if "," in line and not line.startswith("RelativnoVreme"):
+                parts = line.split(",")
+
+                if len(parts) == 2:
+                    vreme_ms.append(int(parts[0]))
+                    ir_signali.append(int(parts[1]))
+
+            elif line.startswith("Status: "):
+                status_merenja = line.split(":")[1].strip()
+            elif line.startswith("Konacan_BPM:"):
+                konacan_bpm = line.split(":")[1].strip()
+            elif line.startswith("Konacan_SpO2:"):
+                konacan_spo2 = line.split(":")[1].strip()
+
+        if ir_signali:
+            cist_signal = procesor.filter_for_plot(ir_signali)
+        else:
+            cist_signal = []
+
+        return json.dumps({
+            "status": "Uspesno",
+            "korisnik": korisnik,
+            "status_pacijenta": status_merenja,
+            "bpm": konacan_bpm,
+            "spo2": konacan_spo2,
+            "vremena": vreme_ms,
+            "signal": cist_signal
+        }), 200, {'Content-Type': 'application/json'}
+    
+    except Exception as e:
+        return json.dumps({"status": "Greska", "poruka": str(e)}), 500
 
 if __name__ == '__main__':
     pokreni_mqtt_u_pozadini()
