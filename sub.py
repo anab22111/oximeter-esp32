@@ -5,7 +5,7 @@ import pygame
 import struct
 import json
 from flask import Flask, render_template
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, emit
 import neurokit2 as nk
 import numpy as np
 
@@ -92,7 +92,7 @@ def obradi_binarno(client, userdata, message):
 
     # Slanje vrednosti na sajt u realnom vremenu
     socketio.emit('update_bpm', {'value': bpm if ir >= 20000 else '--'})
-    socketio.emit('update_spo2', {'value': f"{spo2}%" if (validSPO2 == 1 and ir >= 20000) else '--'})
+    socketio.emit('update_spo2', {'value': f"{spo2}" if (validSPO2 == 1 and ir >= 20000) else '--'})
 
     # 1. Obrada i prikaz pulsa (BPM)
     if ir < 20000:
@@ -214,7 +214,7 @@ def handle_connect():
     global trenutni_korinsik
     
     # Saljemo signal 'inicijalizuj_pacijenta" sa imenom koje vec imamo u memoriji
-    socketio.emit('inicijalizuj_pacijenta', {'ime': trenutni_korinsik})
+    emit('inicijalizuj_pacijenta', {'ime': trenutni_korinsik})
     print(f"[WEB] Pacijent '{trenutni_korinsik}' je uspesno poslat na veb interfejs.")
 
 def on_connect(client, userdata, flags, rc):
