@@ -207,6 +207,15 @@ def obradi_sirovo(client, userdata, message):
 # =====================================================================
 # 5. POKRETANJE MQTT-A I WEB SERVERA
 # =====================================================================
+# Cim se sajt otvori, saljemo ime koje je uneto u terminalu
+@socketio.on('connect')
+def handle_connect():
+    global trenutni_korinsik
+    
+    # Saljemo signal 'inicijalizuj_pacijenta" sa imenom koje vec imamo u memoriji
+    socketio.emit('inicijalizuj_pacijenta', {'ime': trenutni_korinsik})
+    print(f"[WEB] Pacijent '{trenutni_korinsik}' je uspesno poslat na veb interfejs.")
+
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("[USPESNO] Laptop je povezan na lokalni MQTT broker!")
