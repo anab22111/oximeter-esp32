@@ -28,7 +28,7 @@ try:
         pygame.mixer.music.load(putanja_do_zvuka)
         print(f"[USPESNO] Ucitan zvucni fajl: {ZVUK_ALARMA}")
     else:
-        print(f"[GRESKA] Fajl '{ZVUK_ALARMA}' nije pronađen u folderu: {trenutni_folder}")
+        print(f"[GRESKA] Fajl '{ZVUK_ALARMA}' nije pronadjen u folderu: {trenutni_folder}")
 except Exception as e:
     print(f"[GRESKA] Neuspesno ucitavanje zvuka: {e}")
 
@@ -48,7 +48,7 @@ class SignalProcessor:
             cleaned = nk.ppg_clean(signal, sampling_rate=self.sampling_rate, method='elgendi')
             norm_signal = (cleaned - np.min(cleaned)) / (np.max(cleaned) - np.min(cleaned))
             
-            # Okrećemo signal da na sajtu pikovi idu prema gore
+            # Okrecemo signal da na sajtu pikovi idu prema gore
             norm_signal = 1.0 - norm_signal
             return norm_signal.tolist()
         except Exception:
@@ -59,7 +59,7 @@ moj_bafer = []
 
 
 # =====================================================================
-# 3. VAŠE PROMENLJIVE ZA SNIMANJE KORISNIKA
+# 3. PROMENLJIVE ZA SNIMANJE KORISNIKA
 # =====================================================================
 trenutni_korinsik = input("Unesite ime korisnika: ").strip()
 ime_fajla = f"merenje_{trenutni_korinsik}.txt"
@@ -74,7 +74,7 @@ svi_validni_spo2 = []
 detektovan_zastoj = False
 
 # =====================================================================
-# 4. VAŠA ORGINALNA LOGIKA OBRADE (MQTT -> Ekran + Fajl + Web sajt)
+# 4. LOGIKA OBRADE (MQTT -> Ekran + Fajl + Web sajt)
 # =====================================================================
 def obradi_binarno(client, userdata, message):
     global snimanje_zapoceto, snimanje_zavrseno, vreme_pocetka_snimanja
@@ -90,11 +90,11 @@ def obradi_binarno(client, userdata, message):
 
     print(f"Sirovi IR signal: {ir}")
 
-    # --- NOVO: Slanje vrednosti na sajt u realnom vremenu ---
+    # Slanje vrednosti na sajt u realnom vremenu
     socketio.emit('update_bpm', {'value': bpm if ir >= 20000 else '--'})
     socketio.emit('update_spo2', {'value': f"{spo2}%" if (validSPO2 == 1 and ir >= 20000) else '--'})
 
-    # 1. Obrada i prikaz Pulsa (BPM)
+    # 1. Obrada i prikaz pulsa (BPM)
     if ir < 20000:
         print("Trenutni puls: -- BPM (Nema prsta)")
         if snimanje_zapoceto == True: 
@@ -104,7 +104,7 @@ def obradi_binarno(client, userdata, message):
     else:
         print(f"Trenutni puls: {bpm} BPM (Stabilizacija / Proracun...)")
 
-    # 2. Obrada i prikaz Kiseonika (SpO2)
+    # 2. Obrada i prikaz kiseonika (SpO2)
     if ir < 20000:
         print("Zasicenost kiseonikom (SpO2): -- % (Nema prsta)")
     elif validSPO2 == 1:    
@@ -114,7 +114,7 @@ def obradi_binarno(client, userdata, message):
     else:
         print("Zasicenost kiseonikom (SpO2): -- % [Ceka se merenje - bafer se puni]")
 
-    # 3. Upravljanje Alarmom
+    # 3. Upravljanje alarmom
     if ir < 20000:
         print("Status senzora: No finger?")
         print("ALARM UKLJUCEN!")
@@ -124,7 +124,7 @@ def obradi_binarno(client, userdata, message):
         print("Status senzora: Prst detektovan / Merenje u toku...")
         pygame.mixer.music.stop()
 
-    # 4. Zapisivanje odredjenih vrednosti koje stizu da senzora
+    # 4. Zapisivanje odredjenih vrednosti koje stizu sa senzora
     if ir >= 20000 and not snimanje_zapoceto and not snimanje_zavrseno:
         snimanje_zapoceto = True 
         vreme_pocetka_snimanja = time.time()
@@ -148,7 +148,7 @@ def obradi_sirovo(client, userdata, message):
     except:
         return 
 
-    # --- NOVO: WEB PLOT BAFEROVANJE (Bivša ZMQ logika) ---
+    # WEB PLOT BAFEROVANJE (bivsa ZMQ logika)
     if sirovi_ir >= 20000:
         moj_bafer.append(sirovi_ir)
         if len(moj_bafer) > 200:
@@ -159,7 +159,7 @@ def obradi_sirovo(client, userdata, message):
             if cisti_niz:
                 socketio.emit('new_ppg_data', {'niz': cisti_niz})
 
-    # --- VAŠA ORIGINALNA LOGIKA ZA KREIRANJE I UPIS U FAJL ---
+    # LOGIKA ZA KREIRANJE I UPIS U FAJL
     if sirovi_ir >= 20000 and not snimanje_zapoceto and not snimanje_zavrseno:
         snimanje_zapoceto = True 
         vreme_pocetka_snimanja = time.time()
@@ -167,7 +167,7 @@ def obradi_sirovo(client, userdata, message):
         svi_validni_bpm.clear()
         svi_validni_spo2.clear()
         
-        print(f"\n[SISTEM] Prst detektovan! Pravim fajl i počinjem upis za: {trenutni_korinsik}")
+        print(f"\n[SISTEM] Prst detektovan! Pravi se fajl i pocinje upis za: {trenutni_korinsik}")
         with open(ime_fajla, "w") as file:
             file.write(f"Korisnik: {trenutni_korinsik}\nRelativnoVreme_ms,IR_Signal\n")
 
@@ -207,6 +207,7 @@ def obradi_sirovo(client, userdata, message):
 # =====================================================================
 # 5. POKRETANJE MQTT-A I WEB SERVERA
 # =====================================================================
+
 # Cim se sajt otvori, saljemo ime koje je uneto u terminalu
 @socketio.on('connect')
 def handle_connect():
@@ -221,7 +222,7 @@ def on_connect(client, userdata, flags, rc):
         print("[USPESNO] Laptop je povezan na lokalni MQTT broker!")
         client.subscribe("ftn/oksimetar/binarno")
         client.subscribe("ftn/oksimetar/sirovo")
-        print("Slušam podatke sa ESP32 i pokrećem Web sajt...\n")
+        print("Slusaju se podaci sa ESP32 i pokrece se Web sajt...\n")
     else:
         print(f"[GRESKA] Povezivanje neuspesno, kod greske: {rc}")
 
@@ -233,9 +234,9 @@ def pokreni_mqtt_u_pozadini():
     
     try:
         laptop_client.connect("localhost", 1883, 60)
-        laptop_client.loop_start()  # Asinhrona petlja, ne blokira Flask
+        laptop_client.loop_start()      # Asinhrona petlja, ne blokira Flask
     except Exception as e:
-        print(f"Ne mogu da se povežem na broker: {e}")
+        print(f"Nije moguce da se poveze na broker: {e}")
         exit()
 
 @app.route('/')
