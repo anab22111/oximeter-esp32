@@ -3,6 +3,7 @@ import os
 import time
 import pygame
 import struct
+
 import json
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
@@ -15,6 +16,29 @@ import numpy as np
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'ppg_tajna'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
+from socketio import Client
+
+class SignalProcessor:
+    def __init__(self, sampling_rate = 50):
+        self.sampling_rate = sampling_rate
+
+    def filter_for_plot(self, ir_niz):
+        try:
+            if max(ir_niz) == min(ir_niz):
+                return[0.0]*len(ir_niz)
+            signal = np.array(ir_niz)
+            cleaned = nk.ppg_clean(signal, sampling_rate=self.sampling_rate, method='elgendi')
+            norm_signal = (cleaned - np.min(cleaned)) / (np.max(cleaned) - np.min(cleaned))
+
+            return norm_signal.tolist()
+
+        except Exception:
+            return []
+        
+processor = SignalProcessor(sampling_rate=50)
+ir_buffer = []
+MAX_BUFFER_POINTS = 100        
 
 pygame.mixer.init()
 ZVUK_ALARMA = "oxi.mp3"
@@ -31,17 +55,81 @@ try:
 except Exception as e:
     print(f"[GRESKA] Neuspesno ucitavanje zvuka: {e}")
 
-# =====================================================================
-# 2. SIGNAL PROCESSOR KLASA
-# =====================================================================
-class SignalProcessor:
-    def __init__(self, sampling_rate=50):
-        self.sampling_rate = sampling_rate
 
-    def filter_for_plot(self, ir_niz):
+sio = Client()
+try:
+    sio.connect('http://localhost:5000')
+    print("[USPEŠNO] Povezan na Flask SocketIO server.")
+except Exception as e:
+    print(f"[UPOZORENJE] Flask server nije dostupan: {e}")
+
+
+# Funkcija koja se aktivira čim stigne poruka sa tvoje pločice
+def on_message(client, userdata, message):
+    topic = message.topic
+    global ir_buffer
+
+    if topic == "ftn/oksimetar/binarno":
+        binary_payload = message.payload
+    
+        if len(binary_payload) != 14:
+            print(f"[GREŠKA] Očekivano 14 bajtova, stiglo {len(binary_payload)}")
+            return
+        
+        bpm, spo2, ir, validBPM, validSPO2 = struct.unpack("<iiibb", binary_payload)
+
+
+        #Slanje podataka na sajt:
         try:
-            if max(ir_niz) == min(ir_niz):
-                return [0.0] * len(ir_niz)
+            if ir < 20000:
+                sio.emit('update_bpm', {'value': '--'})
+                sio.emit('update_spo2', {'value': '0.00'})
+                ir_buffer = []
+            else:
+                if validBPM == 1:
+                    sio.emit('update_bpm', {'value': str(bpm)})
+                else:
+                    sio.emit('update_bpm', {'value': '--'})
+
+                if validSPO2 == 1:
+                    sio.emit('update_spo2', {'value': str(spo2)})
+                else:
+                    sio.emit('update_spo2', {'value': '0.00'})
+
+                ir_buffer.append(float(ir))
+                if len(ir_buffer) > MAX_BUFFER_POINTS:
+                    ir_buffer.pop(0)
+
+                if len(ir_buffer) >= 20:
+                    filtriran_niz = processor.filter_for_plot(ir_buffer)
+                    sio.emit('new_ppg_data', {'niz': filtriran_niz})
+        except Exception:
+            pass
+
+
+        #Ispis u terminalu:
+        print(f"Sirovi IR signal: {ir}")
+
+        # 1. Obrada i prikaz Pulsa (BPM)
+        if ir < 20000:
+            print("Trenutni puls: -- BPM (Nema prsta)")
+        elif validBPM == 1:
+            print(f"Trenutni puls: {bpm} BPM")
+        else:
+            print(f"Trenutni puls: {bpm} BPM (Stabilizacija / Proračun...)")
+
+        # 2. Obrada i prikaz Kiseonika (SpO2)
+        if ir < 20000:
+            print("Zasićenost kiseonikom (SpO2): -- % (Nema prsta)")
+        elif validSPO2 == 1:
+            print(f"Zasićenost kiseonikom (SpO2): {spo2}% [PODACI VALIDNI]")
+        else:
+            print("Zasićenost kiseonikom (SpO2): -- % [Čeka se merenje - bafer se puni]")
+
+        # 3. Upravljanje Alarmom (Logika zasnovana na prisustvu prsta / IR signalu)
+        if ir < 20000:
+            print("Status senzora: No finger?")
+            print("ALARM UKLJUČEN!")
             
             signal = np.array(ir_niz)
             cleaned = nk.ppg_clean(signal, sampling_rate=self.sampling_rate, method='elgendi')
