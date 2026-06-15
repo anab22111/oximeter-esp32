@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioMonitor - Istorija Merenja</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #0b0e14;
+            color: #ecf0f1;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            width: 100%;
+            padding: 20px;
+            background-color: #1c252e;
+            text-align: center;
+            border-bottom: 2px solid #3498db;
+            position: relative;
+        }
+        /* Dugme NAZAD */
+        .nazad-btn {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #34495e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+        .nazad-btn:hover {
+            background-color: #2c3e50;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            padding: 30px;
+            width: 100%;
+            max-width: 1000px;
+            box-sizing: border-box;
+        }
+        .cards-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            width: 100%;
+        }
+        .card {
+            background-color: #1c252e;
+            border-radius: 15px;
+            padding: 20px;
+            min-width: 220px;
+            text-align: center;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            border: 1px solid #2c3e50;
+        }
+        .value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .label {
+            font-size: 1.1rem;
+            color: #bdc3c7;
+            text-transform: uppercase;
+        }
+        .chart-container {
+            background-color: #1c252e;
+            border-radius: 15px;
+            padding: 20px;
+            width: 100%;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            border: 1px solid #2c3e50;
+            box-sizing: border-box;
+        }
+        .error-poruka {
+            color: #e74c3c;
+            font-size: 1.5rem;
+            margin-top: 50px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <a href="/istorija" class="nazad-btn">← Lista pacijenata</a>
+        <h1>Istorijski izveštaj pregleda</h1>
+        <h2 id="naslov-pacijent" style="color: #3498db; margin: 5px 0;">Pacijent: --</h2>
+    </div>
+
+    <div id="glavni-sadrzaj" class="container">
+        <div class="cards-row">
+            <div class="card">
+                <div class="label">Konačan puls</div>
+                <div id="izvestaj-bpm" class="value" style="color: #2ecc71;">--</div>
+                <div style="color: #2ecc71;">BPM</div>
+            </div>
+            <div class="card">
+                <div class="label">Konačan SpO2</div>
+                <div id="izvestaj-spo2" class="value" style="color: #3498db;">--</div>
+                <div style="color: #3498db;">%</div>
+            </div>
+            <div class="card">
+                <div class="label">Status pacijenta</div>
+                <div id="izvestaj-status" class="value" style="font-size: 1.8rem; margin-top: 18px;">--</div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="label" style="text-align: left; margin-bottom: 15px;">Kompletan snimljeni PPG signal</div>
+            
+            <div style="margin-bottom: 15px; text-align: center; color: #bdc3c7;">
+                Širina prikaza: <input type="range" id="zoomSlider" min="5" max="30" value="30" step="1"
+                                        oninput="azurirajGrafikon(this.value)" style="vertical-align: middle;">
+                <span id="sliderValue" style="color: #3498db; font-weight: bold; margin-left: 10px;">30s</span>
+            </div>
+            
+            <canvas id="istorijskiChart" style="width: 100%;"></canvas>
+        </div>
+    </div>
+
+    <div id="greska-kontejner" class="error-poruka" style="display: none;"></div>
+
+    <script>
+        // Izvlacimo ime pacijenta iz URL-a
+        const urlParams = new URLSearchParams(window.location.search);
+        const pacijent = urlParams.get('pacijent');
+
+        if (!pacijent) {
+            prikaziGresku("Greška: Nije prosleđeno ime pacijenta u URL-u.");
+        } else {
+            document.getElementById('naslov-pacijent').innerText = "Pacijent: " + pacijent;
+            ucitajPodatkeIzFajla(pacijent);
+        }
+
+        // Pozivamo Python backend da procita fajl
+        function ucitajPodatkeIzFajla(ime) {
+            fetch('/api/istorija/' + encodeURIComponent(ime))
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error("Fajl sa merenjem ne postoji ili je prazan za ovog pacijenta.");
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Popunjavamo kartice sa statistikama
+                    document.getElementById('izvestaj-bpm').innerText = data.bpm;
+                    
+                    // Formatiranje SpO2 prikaza
+                    let v = parseFloat(data.spo2);
+                    document.getElementById('izvestaj-spo2').innerText = (isNaN(v) || v <= 0) ? "--" : v.toFixed(2);
+                    
+                    const statusPolje = document.getElementById('izvestaj-status');
+                    statusPolje.innerText = data.status_pacijenta;
+                    
+                    // Bojimo status u zavisnosti od rezultata
+                    if (data.status_pacijenta.includes("KRITICNO")) {
+                        statusPolje.style.color = "#e74c3c";
+                    } else {
+                        statusPolje.style.color = "#2ecc71";
+                    }
+
+                    // Iscrtavamo ceo grafikon odjednom
+                    generisiIstorijskiGrafikon(data.vremena, data.signal);
+                })
+                .catch(err => {
+                    prikaziGresku(err.message);
+                });
+        }
+
+        function prikaziGresku(poruka) {
+            document.getElementById('glavni-sadrzaj').style.display = 'none';
+            const greskaKutija = document.getElementById('greska-kontejner');
+            greskaKutija.innerText = poruka;
+            greskaKutija.style.display = 'block';
+        }
+
+        let globalVreme = [];
+        let globalSignal = [];
+        let chartInstance = null;
+
+        // Funkcija za generisanje velikog statickog grafikona
+        function generisiIstorijskiGrafikon(vremena, signal) {
+            globalVreme = vremena;
+            globalSignal = signal;
+            crtaj(30);      // Pocetno crtanje svih 30s
+        }
+
+        function azurirajGrafikon(sekunde) {
+            document.getElementById('sliderValue').innerText = sekunde + "s";
+            crtaj(parseInt(sekunde));
+        }
+
+        function crtaj(sekunde) {
+            const brojTacaka = sekunde * 50;    // 50 Hz znaci 50 tacaka po sekundi
+            const isecenaVremena = globalVreme.slice(0, brojTacaka);
+            const isecenSignal = globalSignal.slice(0, brojTacaka);
+            const sekundeOsa = isecenaVremena.map(ms => (ms / 1000).toFixed(1) + "s");
+
+            const ctx = document.getElementById('istorijskiChart').getContext('2d');
+            
+            if (chartInstance) { chartInstance.destroy(); }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: sekundeOsa,
+                    datasets: [{
+                        label: 'PPG Signal',
+                        data: isecenSignal,
+                        borderColor: '#2ecc71',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        tension: 0.2,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 2,
+                    scales: {
+                        x: { grid: { color: '#2c3e50' }, ticks: { color: '#ecf0f1' } },
+                        y: { min: 0, max: 1, grid: { color: '#2c3e50' }, ticks: { color: '#ecf0f1' } }
+                    }
+                }
+            });
+        }    
+    </script>
+</body>
+</html>

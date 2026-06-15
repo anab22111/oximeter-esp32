@@ -40,6 +40,10 @@
             text-align: center;
             box-shadow: 0 8px 16px rgba(0,0,0,0.3);
             border: 1px solid #2c3e50;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
         .value {
             font-size: 3rem;
@@ -51,6 +55,7 @@
             font-size: 1.2rem;
             color: #bdc3c7;
             text-transform: uppercase;
+            letter-spacing: 1px;
         }
         .chart-container {
             background-color: #1c252e;
@@ -67,6 +72,24 @@
         }
         .online { color: #2ecc71; }
         .offline { color: #e74c3c; }
+
+        /* Dugme za prikazivanje starih merenja */
+        .btn {
+            padding: 10px 15px;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 15px;
+            width: 95%;
+            transition: background 0.2s;
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .btn-primary { background-color: #3498db; }
+        .btn-primary:hover { background-color: #2980b9; }
     </style>
 </head>
 <body>
@@ -77,6 +100,12 @@
     </div>
 
     <div class="container">
+        <div class="card" style="min-width: 260px;">
+            <div class="label">Aktivni pacijent</div>
+            <div id="pacijent-ime" class="value" style="color: #3498db; font-size: 1rem; margin-top: 20px;">Čeka se unos pacijenta...</div>
+            <button onclick="prikaziIstoriju()" class="btn btn-primary">Prikaži istoriju</button>
+        </div>
+
         <div class="card">
             <div class="label">Otkucaji (BPM)</div>
             <div id="bpm-val" class="value">--</div>
@@ -90,13 +119,13 @@
         </div>
 
         <div class="chart-container">
+            <div class="label" style="text-align: left; margin-bottom: 15px; font-size: 1rem;">PPG Signal (Infrared)</div>
             <canvas id="ppgChart"></canvas>
         </div>
     </div>
 
     <script>
         // Povezivanje na Socket.IO server
-
         const socket = io();
         const statusText = document.getElementById('status-text');
 
@@ -144,23 +173,35 @@
             }
         });
 
-        // Slušanje podataka
+        // Funkcija za dugme ISTORIJA
+        function prikaziIstoriju() {
+            //alert("Istorija merenja za ovog pacijenta trenutno nije dostupna!")
+            window.open('/istorija', '_blank')
+        }
+
+        // Slusanje imena pacijenta koje stize iz Python terminala
+        socket.on('inicijalizuj_pacijenta', (data) => {
+            document.getElementById('pacijent-ime').innerText = data.ime
+        });
+
+        // Slusanje podataka za BPM
         socket.on('update_bpm', (data) => {
             document.getElementById('bpm-val').innerText = data.value;
         });
 
+        // Slusanje podataka za SpO2
         socket.on('update_spo2', (data) => {
             let v = parseFloat(data.value);
             // Ako je nula ili nije broj, ispiši 0.00, inače zaokruži
             document.getElementById('spo2-val').innerText = (isNaN(v) || v <= 0) ? "0.00" : v.toFixed(2);
         });
 
-
+        // Slusanje novih PPG podataka za grafikon
         socket.on('new_ppg_data', (data) => {
             const y = Array.isArray(data.niz) ? data.niz : [];
             ppgChart.data.labels=Array.from({length:y.length}, (_,i) => i);
             ppgChart.data.datasets[0].data = y;
-            ppgChart.update('none'); // Osvežavanje bez laga
+            ppgChart.update('none'); // Osvezavanje bez gresaka
         });
     </script>
 </body>

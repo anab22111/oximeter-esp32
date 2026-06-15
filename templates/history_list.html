@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioMonitor - Lista Pacijenata</title>
+    <style>
+        body {
+            background-color: #0b0e14;
+            color: #ecf0f1;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            width: 100%;
+            padding: 20px;
+            background-color: #1c252e;
+            text-align: center;
+            border-bottom: 2px solid #3498db;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+        }
+        .container {
+            max-width: 600px;
+            width: 100%;
+            padding: 30px;
+            box-sizing: border-box;
+        }
+        .lista-kutija {
+            background-color: #1c252e;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            border: 1px solid #2c3e50;
+        }
+        h3 {
+            margin-top: 0;
+            border-bottom: 1px solid #2c3e50;
+            padding-bottom: 10px;
+            color: #3498db;
+        }
+        .pacijent-red {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #25323f;
+            transition: background 0.2s;
+            border-radius: 8px;
+            margin-bottom: 5px;
+        }
+        .pacijent-red:hover {
+            background-color: #24313d;
+        }
+        .ime-pacijenta {
+            font-size: 1.2rem;
+            font-weight: 500;
+        }
+        .pogledaj-btn {
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+        .pogledaj-btn:hover {
+            background-color: #27ae60;
+        }
+        .prazno-poruka {
+            text-align: center;
+            color: #bdc3c7;
+            padding: 20px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Baza sačuvanih merenja</h1>
+        <p style="color: #bdc3c7; margin: 5px 0;">Izaberite pacijenta za pregled kompletnog istorijskog grafikona</p>
+    </div>
+
+    <div class="container">
+        <div class="lista-kutija">
+            <h3>Registrovani pacijenti u bazi:</h3>
+            <div id="lista-pacijenata-kontejner">
+                <p class="prazno-poruka">Učitavanje liste...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Cim se stranica ucita, trazimo listu od Python-a
+        document.addEventListener("DOMContentLoaded", () => {
+            fetch('/api/pacijenti')
+                .then(response => response.json())
+                .then(data => {
+                    const kontejner = document.getElementById('lista-pacijenata-kontejner');
+                    kontejner.innerHTML = "";   // Brisemo poruku ucitavanja
+
+                    if (data.pacijenti.length === 0) {
+                        kontejner.innerHTML = '<p class="prazno-poruka">Nema pronađenih merenja u bazi podataka.</p>';
+                        return;
+                    }
+
+                    // Generisemo red za svakog pacijenta iz niza
+                    data.pacijenti.forEach(ime => {
+                        const red = document.createElement('div');
+                        red.className = 'pacijent-red';
+                        
+                        red.innerHTML = `
+                            <span class="ime-pacijenta">${ime}</span>
+                            <a href="/istorija/grafikon?pacijent=${encodeURIComponent(ime)}" class="pogledaj-btn">Prikaži grafikon</a>
+                        `;
+                        
+                        kontejner.appendChild(red);
+                    });
+                })
+                .catch(err => {
+                    console.error("Greška pri učitavanju liste:", err);
+                    document.getElementById('lista-pacijenata-kontejner').innerHTML = 
+                        '<p class="prazno-poruka" style="color: #e74c3c;">Greška prilikom povezivanja sa serverom.</p>';
+                });
+        });
+    </script>
+</body>
+</html>
