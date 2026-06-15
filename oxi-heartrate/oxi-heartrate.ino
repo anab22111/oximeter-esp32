@@ -8,9 +8,15 @@
 #include <PubSubClient.h>
 #include "spo2_algorithm.h"
 #include <WiFi.h>
+#include <Adafruit_NeoPixel.h>
 
-#define DRAW_EVERY_N 1  // crtaj svaki uzorak
-static uint32_t lastDrawTime = 0;
+// ================ LED SVETLO PODESAVANJA ==============
+#define PIN 8             // rgb control je na gpio8 pinu
+#define NUMPIXELS 1       // samo jedna led didoda
+
+// definisanej led diode
+Adafruit_NeoPixel rgbLed(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);   // prosledjujemo koji pin, koliko dioda
+ 
 
 // ================= MREZNA podesavanja =================
 const char* ssid = "FTN_wifi";
@@ -63,6 +69,9 @@ static int32_t prikazaniSPO2 = 0;
 static int16_t grafPozicija = 0;  // trenutna X pozicija crtanja
 static long minIR = 50000;
 static long maxIR = 100000;
+
+#define DRAW_EVERY_N 1  // crtaj svaki uzorak
+static uint32_t lastDrawTime = 0;
 
 // ================= PRAVLJENJE KLASE ZA  ESP32C6 - LCD =================
 class LGFX_ESP32C6 : public lgfx::LGFX_Device  // klasa za nas uredjaj LGFX_ESP32C6
@@ -160,10 +169,10 @@ void setup() {
   }
   Serial.println("Sistem spreman. Postavite prst stabilno.");
 
-  // setup_wifi();
+  setup_wifi();
 
-  // client.setServer(mqtt_server, 1883);
-  // client.setCallback(callback);
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
 
   // podesavanja optimalna za sakupljanje SpO2 bafera
   byte ledBrightness = 60;  
@@ -187,13 +196,21 @@ void setup() {
   display.setTextSize(2);
   display.setTextColor(TFT_GREEN, TFT_BLACK);
   display.drawString("ECG: 75 BPM", 10, 10);
+
+  // PODESAVANJA ZA LED
+  rgbLed.begin();            // inicijalizacija
+  rgbLed.setBrightness(200); 
+  // postavi inicijalnu boju na zeleno
+  rgbLed.setPixelColor(0, rgbLed.Color(0, 255, 0));
+  rgbLed.show();
 }
 
 void loop() {
-  // if (!client.connected()) {
-  //   reconnect();
-  // }
-  // client.loop();    
+
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();    
 
   // citamo sirove vrednosti
   long irValue = particleSensor.getIR();
@@ -223,10 +240,16 @@ void loop() {
     bufferFull = false;
     prikazaniBPM = 0;
     prikazaniSPO2 = 0;
+    // postavi boju na crveno
+    rgbLed.setPixelColor(0, rgbLed.Color(0, 255, 0));
+    rgbLed.show();
     //*************************/
     osveziTekstNaEkranu();
   } else {
-    
+    // ukoliko je prethodno bila crvena vrati na zelenu
+    rgbLed.setPixelColor(0, rgbLed.Color(255, 0, 0));
+    rgbLed.show();
+
     if (!bufferFull) {           // ako nije pun ne vrsi se merenje
       // punjnje bafera sa 100 uzoraka
       redBuffer[bufferIndex] = redValue;
@@ -262,7 +285,7 @@ void loop() {
         if (irBuffer[i] >= 20000) {
           char irSubString[12];
           ltoa(irBuffer[i], irSubString, 10);
-          // client.publish("ftn/oksimetar/sirovo", irSubString);
+          client.publish("ftn/oksimetar/sirovo", irSubString);
         }
         
         particleSensor.nextSample();
@@ -327,10 +350,10 @@ void loop() {
       paket.validBPM = 0;
       paket.validSPO2 = 0;
 
-      //client.publish("ftn/oksimetar/binarno", (uint8_t*)&paket, sizeof(paket));
+      client.publish("ftn/oksimetar/binarno", (uint8_t*)&paket, sizeof(paket));
       Serial.println("MQTT: Nema prsta (Poslat prazan binarni paket).");
     } else {
-      //client.publish("ftn/oksimetar/binarno", (uint8_t*)&paket, sizeof(paket));
+      client.publish("ftn/oksimetar/binarno", (uint8_t*)&paket, sizeof(paket));
       
       Serial.print("MQTT Poslato -> ");
       Serial.print("BPM: "); Serial.print(paket.bpm);
