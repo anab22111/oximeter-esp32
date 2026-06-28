@@ -21,7 +21,7 @@ Adafruit_NeoPixel rgbLed(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);   // prosledjuje
 // ================= MREZNA podesavanja =================
 const char* ssid = "FTN_wifi";
 const char* password = "ftn12345";
-const char* mqtt_server = "10.1.146.123"; 
+const char* mqtt_server = "10.1.150.52"; 
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -223,12 +223,20 @@ void loop() {
     crtajTackuNaEkranu(irValue);
   }
 
+
   // slanje ir vrednosti za plotovanje
   if (irValue >= 20000) {
     char irString[12];
     ltoa(irValue, irString, 10);
     client.publish("ftn/oksimetar/sirovo", irString); 
   }
+  else{
+    irValue = 0;
+    char irString[12];
+    ltoa(irValue, irString, 10);
+    client.publish("ftn/oksimetar/sirovo", irString); 
+  }
+  
 
   // blaga provera za prisustvo prsta (samo ako je skroz skinut resetujemo)
   if (irValue < 20000) { 
