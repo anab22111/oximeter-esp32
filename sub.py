@@ -209,8 +209,7 @@ def obradi_sirovo(client, userdata, message):
     except:
         return      # Ignorisemo losije formirane poruke  
 
-    # WEB PLOT BAFEROVANJE (bivsa ZMQ logika)
-    #if sirovi_ir >= 20000:
+    # WEB PLOT BAFEROVANJE
     moj_bafer.append(sirovi_ir)
 
     # Bafer drzi samo poslednjih 200 uzoraka (4s prikaza pri 50 Hz)
