@@ -124,8 +124,8 @@ class LGFX_ESP32C6 : public lgfx::LGFX_Device  // klasa za nas uredjaj LGFX_ESP3
 
       panel_cfg.offset_rotation  = 0;
 
-      panel_cfg.dummy_read_pixel = 8;     // Ostavi 8 (standardno za ST7789 drajver čip)
-      panel_cfg.dummy_read_bits  = 1;     // Ostavi 1
+      panel_cfg.dummy_read_pixel = 8;     // standardno za ST7789 drajver 
+      panel_cfg.dummy_read_bits  = 1;    
 
       panel_cfg.readable = false;        // nemamo miso zicu tako da ne treba nista
 
@@ -271,13 +271,13 @@ void loop() {
       }
     } 
     else {
-      // Pomeri prvih 75 uzoraka na pocetak
+      // pomeri prvih 75 uzoraka na pocetak
       for (byte i = 0; i < 75; i++) {
         redBuffer[i] = redBuffer[i + 25];
         irBuffer[i] = irBuffer[i + 25];
       }
 
-      // Prikupi novih 25 uzoraka
+      // prikupi novih 25 uzoraka
       for (byte i = 75; i < BUFFER_SIZE; i++) {
         while (particleSensor.available() == false) {
           particleSensor.check();
@@ -286,7 +286,7 @@ void loop() {
         redBuffer[i] = particleSensor.getRed();
         irBuffer[i] = particleSensor.getIR();
         
-        // Crtanje tokom punjenja — ne blokira grafik
+        // crtanje tokom punjenja — ne blokira grafik
         crtajTackuNaEkranu(irBuffer[i]);
         
         // MQTT slanje tokom punjenja
@@ -299,7 +299,7 @@ void loop() {
         particleSensor.nextSample();
       }
 
-      // Racunanje nakon sto su 25 novih uzoraka prikupljeni
+      // racunanje nakon sto su 25 novih uzoraka prikupljeni
       maxim_heart_rate_and_oxygen_saturation(irBuffer, BUFFER_SIZE, redBuffer,
                                             &spo2, &validSPO2, &heartRate, &validHeartRate);
     }
@@ -323,7 +323,7 @@ void loop() {
       paket.validBPM = 1;
       prikazaniBPM = lastValidBPM; // prosledjujemo istu validnu i filtriranu vrednost ekranu
     } else {
-      // ako je prst tu ali trenutno racuna, zadrži poslednji dobar puls umesto nule
+      // ako je prst tu ali trenutno racuna, zadrzi poslednji dobar puls umesto nule
       if (irValue > 20000 && lastValidBPM > 0) {
         paket.bpm = lastValidBPM;
         paket.validBPM = 0;
