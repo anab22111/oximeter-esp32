@@ -119,7 +119,7 @@ class LGFX_ESP32C6 : public lgfx::LGFX_Device  // klasa za nas uredjaj LGFX_ESP3
       panel_cfg.panel_width = 172; 
       panel_cfg.panel_height = 320;
 
-      panel_cfg.offset_x = 34;  // <--- Pomera sliku u centar memorije drajvera
+      panel_cfg.offset_x = 34;  //       pomera sliku u centar memorije drajvera
       panel_cfg.offset_y = 0;
 
       panel_cfg.offset_rotation  = 0;
@@ -216,7 +216,7 @@ void loop() {
   long irValue = particleSensor.getIR();
   long redValue = particleSensor.getRed();
 
-  // KONTINUALNO CRTANJE GRAFIKA: Crta se jedna tačka u svakom prolazu kroz loop
+  // KONTINUALNO CRTANJE GRAFIKA: crta se jedna tacka u svakom prolazu kroz loop
   uint32_t now_ms = millis();
   if (now_ms - lastDrawTime >= 10) {
     lastDrawTime = now_ms;
