@@ -1,9 +1,9 @@
 # Pulse-oximeter system MAX30102 and ESP32-C6 LCD
 
-System for real-time meadurment of oxygen saturation and heartbeat. Data is plotted on a website and an lcd display, while showing numbers of current BPM and SPO2. Website allows user to search history of previous patients.
+System for real-time measurment of oxygen saturation and heartbeat. Data is plotted on a website and an lcd display, while showing numbers of current BPM and SPO2. Website allows user to search history of previous patients.
 
-## Architecture
-
+Link to youtube video:
+>https://youtu.be/IwrD5q8MEhw?si=trPSmEghSWtCMKf4
 
 ## Setup
 - **Sensor:** MAX30102 Pulse Oximeter
@@ -47,9 +47,9 @@ When `sub.py` runs user is asked to enter a name for the patient whose pulse and
 ### Data streaming
 - The sensor constantly monitors infrared values. When a valid finger placement is detected (IR >= 20000) a fixed 30-second recording starts. The script streams individual data values directly into the .txt record file along with timestamps.
 - The Flask server collects a rolling window of the last 200 raw data entries, passes them through the `neurokit2` digital filter to eliminate high-frequency anomalies, inverts the signal structure sends it straight to the UI.
-- LCD dislay is refreshed every two seconds or instantly when there is no heartbeat.
+- LCD display is refreshed every two seconds or instantly when there is no heartbeat.
 
 ### Calculations
-- ESP32-C6 starts calculating BPM and SPO2 only when the `redBuffer[100]` and `irBUffer[]100` are full. Microcontroller uses the `maxim_heart_rate_and_oxygen_saturation` algorithm to get the correct values. The algorithm is then called every 25 new values.
+- ESP32-C6 starts calculating BPM and SPO2 only when the `redBuffer[100]` and `irBUffer[100]` are full. Microcontroller uses the `maxim_heart_rate_and_oxygen_saturation` algorithm to get the correct values. The algorithm is then called every 25 new values.
 - Validated statistics are updated over MQTT every 2 seconds.
 - For simulation purposes when user removes finger ESP32-C6 logic counts that as 0 BPM and an alarm is started, as the **red flat line** files the LCD screen.
